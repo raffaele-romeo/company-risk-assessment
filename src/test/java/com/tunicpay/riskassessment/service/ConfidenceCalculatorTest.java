@@ -1,6 +1,7 @@
 package com.tunicpay.riskassessment.service;
 
 import com.tunicpay.riskassessment.datasource.CompaniesHouseData;
+import com.tunicpay.riskassessment.datasource.DataSource;
 import com.tunicpay.riskassessment.datasource.DataSourceResult;
 import com.tunicpay.riskassessment.datasource.GatheredData;
 import com.tunicpay.riskassessment.model.AdverseMediaFinding;
@@ -10,17 +11,39 @@ import com.tunicpay.riskassessment.model.Officer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
 
 class ConfidenceCalculatorTest {
 
+    private DataSource<CompaniesHouseData> chSource;
+    private DataSource<List<AdverseMediaFinding>> amSource;
     private ConfidenceCalculator calculator;
 
+    @SuppressWarnings("unchecked")
     @BeforeEach
     void setUp() {
-        calculator = new ConfidenceCalculator();
+        chSource = mock(DataSource.class);
+        amSource = mock(DataSource.class);
+        when(chSource.name()).thenReturn("companies-house");
+        when(amSource.name()).thenReturn("adverse-media");
+        when(chSource.totalSections()).thenReturn(5);
+        when(amSource.totalSections()).thenReturn(1);
+        when(amSource.populatedSections(any())).thenReturn(1);
+
+        calculator = new ConfidenceCalculator(List.of(chSource, amSource));
+    }
+
+    private GatheredData gathered(DataSourceResult<?> ch, DataSourceResult<?> am) {
+        Map<String, DataSourceResult<?>> map = new LinkedHashMap<>();
+        map.put("companies-house", ch);
+        map.put("adverse-media", am);
+        return new GatheredData(map);
     }
 
     @Test
@@ -32,12 +55,12 @@ class ConfidenceCalculatorTest {
                 List.of(new CompaniesHouseData.RawConfirmationStatementFiling("2024-01-01", "2024-01-01", "CS01")),
                 List.of()
         );
-        var gathered = new GatheredData(
+        when(chSource.populatedSections(chData)).thenReturn(5);
+
+        Confidence result = calculator.compute(gathered(
                 DataSourceResult.success(chData, "companies-house", 100),
                 DataSourceResult.success(List.of(), "adverse-media", 50)
-        );
-
-        Confidence result = calculator.compute(gathered);
+        ));
 
         assertEquals(1.0, result.completenessScore());
         assertEquals(1.0, result.sourceCoverage());
@@ -54,12 +77,12 @@ class ConfidenceCalculatorTest {
                 List.of(),
                 List.of()
         );
-        var gathered = new GatheredData(
+        when(chSource.populatedSections(chData)).thenReturn(5);
+
+        Confidence result = calculator.compute(gathered(
                 DataSourceResult.success(chData, "companies-house", 100),
                 DataSourceResult.failure("adverse-media", 5000, "timeout")
-        );
-
-        Confidence result = calculator.compute(gathered);
+        ));
 
         assertEquals(0.83, result.completenessScore());
         assertEquals(0.5, result.sourceCoverage());
@@ -69,12 +92,10 @@ class ConfidenceCalculatorTest {
 
     @Test
     void partialCoverageWhenCompaniesHouseFails() {
-        var gathered = new GatheredData(
+        Confidence result = calculator.compute(gathered(
                 DataSourceResult.failure("companies-house", 5000, "timeout"),
                 DataSourceResult.success(List.of(), "adverse-media", 50)
-        );
-
-        Confidence result = calculator.compute(gathered);
+        ));
 
         assertEquals(0.17, result.completenessScore());
         assertEquals(0.5, result.sourceCoverage());
@@ -84,12 +105,10 @@ class ConfidenceCalculatorTest {
 
     @Test
     void zeroCoverageWhenAllSourcesFail() {
-        var gathered = new GatheredData(
+        Confidence result = calculator.compute(gathered(
                 DataSourceResult.failure("companies-house", 5000, "timeout"),
                 DataSourceResult.failure("adverse-media", 5000, "timeout")
-        );
-
-        Confidence result = calculator.compute(gathered);
+        ));
 
         assertEquals(0.0, result.completenessScore());
         assertEquals(0.0, result.sourceCoverage());
@@ -106,12 +125,12 @@ class ConfidenceCalculatorTest {
                 List.of(),
                 List.of()
         );
-        var gathered = new GatheredData(
+        when(chSource.populatedSections(chData)).thenReturn(4);
+
+        Confidence result = calculator.compute(gathered(
                 DataSourceResult.success(chData, "companies-house", 100),
                 DataSourceResult.success(List.of(), "adverse-media", 50)
-        );
-
-        Confidence result = calculator.compute(gathered);
+        ));
 
         assertEquals(0.83, result.completenessScore());
         assertEquals(1.0, result.sourceCoverage());

@@ -15,12 +15,12 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 @Component
 public class OpenRouterClient {
 
     private static final Logger log = LoggerFactory.getLogger(OpenRouterClient.class);
-    private static final int MAX_LOG_BODY_LENGTH = 500;
 
     private final AppConfig.OpenRouter config;
     private final HttpClient httpClient;
@@ -73,14 +73,16 @@ public class OpenRouterClient {
         }
     }
 
-    public String chatCompletionWithRetry(String systemPrompt, String userPrompt, String errorMessage) {
+    public <T> T chatCompletionWithRetry(String systemPrompt, String userPrompt, Function<String, T> processor) {
         try {
-            return chatCompletion(systemPrompt, userPrompt);
+            String response = chatCompletion(systemPrompt, userPrompt);
+            return processor.apply(response);
         } catch (Exception e) {
             log.warn("First LLM attempt failed, retrying with corrective prompt: {}", e.getMessage());
             String corrective = userPrompt + "\n\nYour previous response was not valid. The error was: "
-                    + errorMessage + ". Please try again following the rules exactly.";
-            return chatCompletion(systemPrompt, corrective);
+                    + e.getMessage() + ". Please try again following the rules exactly.";
+            String response = chatCompletion(systemPrompt, corrective);
+            return processor.apply(response);
         }
     }
 

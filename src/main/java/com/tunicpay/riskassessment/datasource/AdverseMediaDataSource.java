@@ -55,6 +55,16 @@ public class AdverseMediaDataSource implements DataSource<List<AdverseMediaFindi
         return "adverse-media";
     }
 
+    @Override
+    public int totalSections() {
+        return 1;
+    }
+
+    @Override
+    public int populatedSections(List<AdverseMediaFinding> data) {
+        return 1;
+    }
+
     public String promptVersion() {
         return PROMPT_VERSION;
     }
@@ -68,28 +78,16 @@ public class AdverseMediaDataSource implements DataSource<List<AdverseMediaFindi
                 .formatted(companyName, companyNumber, jurisdiction);
 
         try {
-            String response = llmClient.chatCompletion(SYSTEM_PROMPT, userPrompt);
-            log.debug("LLM raw response for {}: {}", companyName, response);
-            List<AdverseMediaFinding> findings = parseResponse(response);
+            List<AdverseMediaFinding> findings = llmClient.chatCompletionWithRetry(
+                    SYSTEM_PROMPT, userPrompt, this::parseResponse);
 
             long duration = System.currentTimeMillis() - start;
             log.info("Adverse media: {} findings in {}ms for {}", findings.size(), duration, companyName);
             return DataSourceResult.success(findings, name(), duration);
-        } catch (Exception firstError) {
-            log.warn("First adverse media attempt failed: {}", firstError.getMessage());
-            try {
-                String retryResponse = llmClient.chatCompletionWithRetry(
-                        SYSTEM_PROMPT, userPrompt, firstError.getMessage());
-                List<AdverseMediaFinding> findings = parseResponse(retryResponse);
-
-                long duration = System.currentTimeMillis() - start;
-                log.info("Adverse media (retry): {} findings in {}ms for {}", findings.size(), duration, companyName);
-                return DataSourceResult.success(findings, name(), duration);
-            } catch (Exception retryError) {
-                long duration = System.currentTimeMillis() - start;
-                log.error("Adverse media failed after retry in {}ms for {}: {}", duration, companyName, retryError.getMessage());
-                return DataSourceResult.failure(name(), duration, retryError.getMessage());
-            }
+        } catch (Exception e) {
+            long duration = System.currentTimeMillis() - start;
+            log.error("Adverse media failed after retry in {}ms for {}: {}", duration, companyName, e.getMessage());
+            return DataSourceResult.failure(name(), duration, e.getMessage());
         }
     }
 

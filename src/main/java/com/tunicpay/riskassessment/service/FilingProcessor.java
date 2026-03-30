@@ -11,7 +11,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 @Service
-public class FilingDeadlineCalculator {
+public class FilingProcessor {
 
     public List<AccountFiling> computeAccountFilings(List<CompaniesHouseData.RawAccountFiling> raw, String dateOfCessation) {
         LocalDate cutoff = cutoffDate(dateOfCessation);

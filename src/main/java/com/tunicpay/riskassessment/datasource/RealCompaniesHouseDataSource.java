@@ -48,6 +48,22 @@ public class RealCompaniesHouseDataSource implements DataSource<CompaniesHouseDa
     }
 
     @Override
+    public int totalSections() {
+        return 5;
+    }
+
+    @Override
+    public int populatedSections(CompaniesHouseData data) {
+        int count = 0;
+        if (data.profile() != null) count++;
+        if (data.officers() != null && !data.officers().isEmpty()) count++;
+        if (data.accountFilings() != null) count++;
+        if (data.confirmationStatementFilings() != null) count++;
+        if (data.liquidationFilings() != null) count++;
+        return count;
+    }
+
+    @Override
     public DataSourceResult<CompaniesHouseData> fetch(String companyNumber, String companyName, String jurisdiction) {
         long start = System.currentTimeMillis();
         try {

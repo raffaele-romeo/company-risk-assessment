@@ -174,12 +174,12 @@ src/main/java/com/tunicpay/riskassessment/
 ├── datasource/      DataSource interface, DataGatherer, CH + adverse media sources
 ├── llm/             OpenRouterClient
 ├── model/           Data records (CompanyProfile, Officer, AccountFiling, etc.)
-└── service/         AssessmentService, FilingDeadlineCalculator, ConfidenceCalculator, cache
+└── service/         AssessmentService, FilingProcessor, ConfidenceCalculator, cache
 
 src/test/java/com/tunicpay/riskassessment/
 ├── controller/      CompanyControllerTest
 ├── datasource/      AdverseMediaDataSourceTest
-└── service/         FilingDeadlineCalculatorTest, ConfidenceCalculatorTest, AssessmentServiceTest
+└── service/         FilingProcessorTest, ConfidenceCalculatorTest, AssessmentServiceTest
 
 frontend/
 └── app.py           Streamlit UI (search, disambiguation, tabular data display)

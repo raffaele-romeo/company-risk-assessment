@@ -8,6 +8,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.util.function.Function;
 import java.io.IOException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -105,7 +106,7 @@ class OpenRouterClientTest {
                 {"choices":[{"message":{"content":"First try"}}]}
                 """);
 
-        String result = client.chatCompletionWithRetry("system", "user", "previous error");
+        String result = client.chatCompletionWithRetry("system", "user", Function.identity());
 
         assertEquals("First try", result);
     }
@@ -118,9 +119,32 @@ class OpenRouterClientTest {
                 {"choices":[{"message":{"content":"Second try"}}]}
                 """);
 
-        String result = client.chatCompletionWithRetry("system", "user", "error");
+        String result = client.chatCompletionWithRetry("system", "user", Function.identity());
 
         assertEquals("Second try", result);
+        verify(httpClient, times(2)).send(any(), any());
+    }
+
+    @Test
+    void chatCompletionWithRetryRetriesOnProcessorFailure() throws Exception {
+        stubHttpResponses(
+                200, """
+                {"choices":[{"message":{"content":"bad"}}]}
+                """,
+                200, """
+                {"choices":[{"message":{"content":"good"}}]}
+                """);
+
+        var callCount = new int[]{0};
+        String result = client.chatCompletionWithRetry("system", "user", response -> {
+            callCount[0]++;
+            if (callCount[0] == 1) {
+                throw new RuntimeException("parse error");
+            }
+            return response;
+        });
+
+        assertEquals("good", result);
         verify(httpClient, times(2)).send(any(), any());
     }
 

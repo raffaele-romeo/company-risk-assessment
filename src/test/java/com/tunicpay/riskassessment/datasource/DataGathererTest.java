@@ -1,7 +1,6 @@
 package com.tunicpay.riskassessment.datasource;
 
 import com.tunicpay.riskassessment.config.AppConfig;
-import com.tunicpay.riskassessment.model.AdverseMediaFinding;
 import com.tunicpay.riskassessment.model.CompanyProfile;
 import com.tunicpay.riskassessment.model.Officer;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,7 +16,7 @@ import static org.mockito.Mockito.*;
 class DataGathererTest {
 
     private DataSource<CompaniesHouseData> chSource;
-    private DataSource<List<AdverseMediaFinding>> amSource;
+    private DataSource<List<?>> amSource;
     private DataGatherer gatherer;
 
     @SuppressWarnings("unchecked")
@@ -31,7 +30,7 @@ class DataGathererTest {
         var appConfig = new AppConfig();
         appConfig.getAssessment().setSourceTimeoutSeconds(5);
         ExecutorService executor = Executors.newFixedThreadPool(2);
-        gatherer = new DataGatherer(chSource, amSource, executor, appConfig);
+        gatherer = new DataGatherer(List.of(chSource, amSource), executor, appConfig);
     }
 
     private CompaniesHouseData buildChData() {
@@ -51,8 +50,8 @@ class DataGathererTest {
 
         GatheredData result = gatherer.gather("123", "TEST", "GB");
 
-        assertTrue(result.companiesHouse().success());
-        assertTrue(result.adverseMedia().success());
+        assertTrue(result.<CompaniesHouseData>get("companies-house").success());
+        assertTrue(result.<List<?>>get("adverse-media").success());
     }
 
     @Test
@@ -64,8 +63,8 @@ class DataGathererTest {
 
         GatheredData result = gatherer.gather("123", "TEST", "GB");
 
-        assertFalse(result.companiesHouse().success());
-        assertTrue(result.adverseMedia().success());
+        assertFalse(result.<CompaniesHouseData>get("companies-house").success());
+        assertTrue(result.<List<?>>get("adverse-media").success());
     }
 
     @Test
@@ -77,8 +76,8 @@ class DataGathererTest {
 
         GatheredData result = gatherer.gather("123", "TEST", "GB");
 
-        assertTrue(result.companiesHouse().success());
-        assertFalse(result.adverseMedia().success());
+        assertTrue(result.<CompaniesHouseData>get("companies-house").success());
+        assertFalse(result.<List<?>>get("adverse-media").success());
     }
 
     @Test
@@ -90,8 +89,8 @@ class DataGathererTest {
 
         GatheredData result = gatherer.gather("123", "TEST", "GB");
 
-        assertFalse(result.companiesHouse().success());
-        assertFalse(result.adverseMedia().success());
+        assertFalse(result.<CompaniesHouseData>get("companies-house").success());
+        assertFalse(result.<List<?>>get("adverse-media").success());
     }
 
     @Test
@@ -105,8 +104,8 @@ class DataGathererTest {
         GatheredData result = gatherer.gather("123", "TEST", "GB");
         long duration = System.currentTimeMillis() - start;
 
-        assertTrue(result.companiesHouse().success());
-        assertTrue(result.adverseMedia().success());
+        assertTrue(result.<CompaniesHouseData>get("companies-house").success());
+        assertTrue(result.<List<?>>get("adverse-media").success());
         assertTrue(duration < 500, "Sources should run in parallel, took " + duration + "ms");
     }
 }

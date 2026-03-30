@@ -2,17 +2,17 @@ package com.tunicpay.riskassessment.service;
 
 import com.tunicpay.riskassessment.config.AppConfig;
 import com.tunicpay.riskassessment.controller.UpstreamFailureException;
-import com.tunicpay.riskassessment.datasource.CompaniesHouseData;
-import com.tunicpay.riskassessment.datasource.DataGatherer;
-import com.tunicpay.riskassessment.datasource.DataSourceResult;
-import com.tunicpay.riskassessment.datasource.GatheredData;
+import com.tunicpay.riskassessment.datasource.*;
 import com.tunicpay.riskassessment.model.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class AssessmentServiceTest {
@@ -21,15 +21,26 @@ class AssessmentServiceTest {
     private AssessmentCache cache;
     private AssessmentService service;
 
+    @SuppressWarnings("unchecked")
     @BeforeEach
     void setUp() {
         dataGatherer = mock(DataGatherer.class);
         var appConfig = new AppConfig();
         cache = new AssessmentCache(appConfig);
+
+        DataSource<CompaniesHouseData> chSource = mock(DataSource.class);
+        DataSource<List<AdverseMediaFinding>> amSource = mock(DataSource.class);
+        when(chSource.name()).thenReturn("companies-house");
+        when(amSource.name()).thenReturn("adverse-media");
+        when(chSource.totalSections()).thenReturn(5);
+        when(amSource.totalSections()).thenReturn(1);
+        when(chSource.populatedSections(any())).thenReturn(5);
+        when(amSource.populatedSections(any())).thenReturn(1);
+
         service = new AssessmentService(
                 dataGatherer,
-                new FilingDeadlineCalculator(),
-                new ConfidenceCalculator(),
+                new FilingProcessor(),
+                new ConfidenceCalculator(List.of(chSource, amSource)),
                 cache
         );
     }
@@ -44,13 +55,20 @@ class AssessmentServiceTest {
         );
     }
 
+    private GatheredData gathered(DataSourceResult<?> ch, DataSourceResult<?> am) {
+        Map<String, DataSourceResult<?>> map = new LinkedHashMap<>();
+        map.put("companies-house", ch);
+        map.put("adverse-media", am);
+        return new GatheredData(map);
+    }
+
     @Test
     void assessReturnsFullAssessmentWhenAllSourcesSucceed() {
-        var gathered = new GatheredData(
+        var g = gathered(
                 DataSourceResult.success(buildChData(), "companies-house", 100),
                 DataSourceResult.success(List.of(), "adverse-media", 50)
         );
-        when(dataGatherer.gather("123", "TEST LTD", "GB")).thenReturn(gathered);
+        when(dataGatherer.gather("123", "TEST LTD", "GB")).thenReturn(g);
 
         CompanyAssessment result = service.assess("123", "TEST LTD", "GB");
 
@@ -70,11 +88,11 @@ class AssessmentServiceTest {
         var adverseMedia = List.of(
                 new AdverseMediaFinding("BBC", "Test headline", "2024-01-01", "Test summary")
         );
-        var gathered = new GatheredData(
+        var g = gathered(
                 DataSourceResult.failure("companies-house", 5000, "timeout"),
                 DataSourceResult.success(adverseMedia, "adverse-media", 50)
         );
-        when(dataGatherer.gather("123", "TEST LTD", "GB")).thenReturn(gathered);
+        when(dataGatherer.gather("123", "TEST LTD", "GB")).thenReturn(g);
 
         CompanyAssessment result = service.assess("123", "TEST LTD", "GB");
 
@@ -87,11 +105,11 @@ class AssessmentServiceTest {
 
     @Test
     void assessHandlesPartialFailureWhenAdverseMediaFails() {
-        var gathered = new GatheredData(
+        var g = gathered(
                 DataSourceResult.success(buildChData(), "companies-house", 100),
                 DataSourceResult.failure("adverse-media", 5000, "timeout")
         );
-        when(dataGatherer.gather("123", "TEST LTD", "GB")).thenReturn(gathered);
+        when(dataGatherer.gather("123", "TEST LTD", "GB")).thenReturn(g);
 
         CompanyAssessment result = service.assess("123", "TEST LTD", "GB");
 
@@ -102,11 +120,11 @@ class AssessmentServiceTest {
 
     @Test
     void assessThrowsWhenAllSourcesFail() {
-        var gathered = new GatheredData(
+        var g = gathered(
                 DataSourceResult.failure("companies-house", 5000, "timeout"),
                 DataSourceResult.failure("adverse-media", 5000, "timeout")
         );
-        when(dataGatherer.gather("123", "TEST LTD", "GB")).thenReturn(gathered);
+        when(dataGatherer.gather("123", "TEST LTD", "GB")).thenReturn(g);
 
         assertThrows(UpstreamFailureException.class,
                 () -> service.assess("123", "TEST LTD", "GB"));
@@ -114,11 +132,11 @@ class AssessmentServiceTest {
 
     @Test
     void assessReturnsCachedResultOnSecondCall() {
-        var gathered = new GatheredData(
+        var g = gathered(
                 DataSourceResult.success(buildChData(), "companies-house", 100),
                 DataSourceResult.success(List.of(), "adverse-media", 50)
         );
-        when(dataGatherer.gather("123", "TEST LTD", "GB")).thenReturn(gathered);
+        when(dataGatherer.gather("123", "TEST LTD", "GB")).thenReturn(g);
 
         CompanyAssessment first = service.assess("123", "TEST LTD", "GB");
         CompanyAssessment second = service.assess("123", "TEST LTD", "GB");
@@ -136,11 +154,11 @@ class AssessmentServiceTest {
                 List.of(),
                 List.of(new CompaniesHouseData.RawLiquidationFiling("2023-03-01", "LRESSP", "Statement of affairs"))
         );
-        var gathered = new GatheredData(
+        var g = gathered(
                 DataSourceResult.success(chData, "companies-house", 100),
                 DataSourceResult.success(List.of(), "adverse-media", 50)
         );
-        when(dataGatherer.gather("999", "GONE LTD", "GB")).thenReturn(gathered);
+        when(dataGatherer.gather("999", "GONE LTD", "GB")).thenReturn(g);
 
         CompanyAssessment result = service.assess("999", "GONE LTD", "GB");
 

@@ -3,6 +3,7 @@ package com.tunicpay.riskassessment.service;
 import com.tunicpay.riskassessment.controller.UpstreamFailureException;
 import com.tunicpay.riskassessment.datasource.CompaniesHouseData;
 import com.tunicpay.riskassessment.datasource.DataGatherer;
+import com.tunicpay.riskassessment.datasource.DataSourceResult;
 import com.tunicpay.riskassessment.datasource.GatheredData;
 import com.tunicpay.riskassessment.model.*;
 import org.slf4j.Logger;
@@ -19,12 +20,12 @@ public class AssessmentService {
     private static final Logger log = LoggerFactory.getLogger(AssessmentService.class);
 
     private final DataGatherer dataGatherer;
-    private final FilingDeadlineCalculator deadlineCalculator;
+    private final FilingProcessor deadlineCalculator;
     private final ConfidenceCalculator confidenceCalculator;
     private final AssessmentCache cache;
 
     public AssessmentService(DataGatherer dataGatherer,
-                             FilingDeadlineCalculator deadlineCalculator,
+                             FilingProcessor deadlineCalculator,
                              ConfidenceCalculator confidenceCalculator,
                              AssessmentCache cache) {
         this.dataGatherer = dataGatherer;
@@ -44,7 +45,7 @@ public class AssessmentService {
 
         GatheredData gathered = dataGatherer.gather(companyNumber, companyName, jurisdiction);
 
-        if (!gathered.companiesHouse().success() && !gathered.adverseMedia().success()) {
+        if (gathered.allFailed()) {
             throw new UpstreamFailureException("All data sources failed for company " + companyNumber);
         }
 
@@ -54,8 +55,9 @@ public class AssessmentService {
         List<ConfirmationStatementFiling> confirmationStatements = List.of();
         LiquidationData liquidation = new LiquidationData(false, List.of());
 
-        if (gathered.companiesHouse().success()) {
-            CompaniesHouseData chData = gathered.companiesHouse().data();
+        DataSourceResult<CompaniesHouseData> chResult = gathered.get("companies-house");
+        if (chResult != null && chResult.success()) {
+            CompaniesHouseData chData = chResult.data();
             profile = chData.profile();
             officers = chData.officers();
             String cessation = profile != null ? profile.dateOfCessation() : null;
@@ -66,8 +68,9 @@ public class AssessmentService {
             liquidation = deadlineCalculator.computeLiquidation(chData.liquidationFilings());
         }
 
-        List<AdverseMediaFinding> adverseMedia = gathered.adverseMedia().success()
-                ? gathered.adverseMedia().data()
+        DataSourceResult<List<AdverseMediaFinding>> amResult = gathered.get("adverse-media");
+        List<AdverseMediaFinding> adverseMedia = (amResult != null && amResult.success())
+                ? amResult.data()
                 : List.of();
 
         Confidence confidence = confidenceCalculator.compute(gathered);

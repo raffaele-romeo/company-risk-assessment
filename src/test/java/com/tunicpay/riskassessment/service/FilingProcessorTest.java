@@ -13,13 +13,13 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class FilingDeadlineCalculatorTest {
+class FilingProcessorTest {
 
-    private FilingDeadlineCalculator calculator;
+    private FilingProcessor calculator;
 
     @BeforeEach
     void setUp() {
-        calculator = new FilingDeadlineCalculator();
+        calculator = new FilingProcessor();
     }
 
     // --- Account filings ---

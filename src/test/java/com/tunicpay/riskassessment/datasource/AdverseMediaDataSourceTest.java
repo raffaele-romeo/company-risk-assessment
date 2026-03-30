@@ -7,9 +7,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class AdverseMediaDataSourceTest {
@@ -23,12 +25,21 @@ class AdverseMediaDataSourceTest {
         dataSource = new AdverseMediaDataSource(llmClient, new ObjectMapper());
     }
 
+    @SuppressWarnings("unchecked")
+    private void stubChatCompletionWithRetry(String response) {
+        when(llmClient.chatCompletionWithRetry(anyString(), anyString(), any(Function.class)))
+                .thenAnswer(invocation -> {
+                    Function<String, ?> processor = invocation.getArgument(2);
+                    return processor.apply(response);
+                });
+    }
+
     @Test
     void parsesValidJsonArray() {
         String json = """
                 [{"source":"BBC","headline":"Company fined","date":"2024-01-01","summary":"Details"}]
                 """;
-        when(llmClient.chatCompletion(anyString(), anyString())).thenReturn(json);
+        stubChatCompletionWithRetry(json);
 
         DataSourceResult<List<AdverseMediaFinding>> result = dataSource.fetch("123", "TEST", "GB");
 
@@ -40,7 +51,7 @@ class AdverseMediaDataSourceTest {
 
     @Test
     void parsesEmptyArray() {
-        when(llmClient.chatCompletion(anyString(), anyString())).thenReturn("[]");
+        stubChatCompletionWithRetry("[]");
 
         DataSourceResult<List<AdverseMediaFinding>> result = dataSource.fetch("123", "TEST", "GB");
 
@@ -55,7 +66,7 @@ class AdverseMediaDataSourceTest {
                 [{"source":"BBC","headline":"Fined","date":null,"summary":"Details"}]
                 ```
                 """;
-        when(llmClient.chatCompletion(anyString(), anyString())).thenReturn(json);
+        stubChatCompletionWithRetry(json);
 
         DataSourceResult<List<AdverseMediaFinding>> result = dataSource.fetch("123", "TEST", "GB");
 
@@ -63,25 +74,10 @@ class AdverseMediaDataSourceTest {
         assertEquals(1, result.data().size());
     }
 
-    @Test
-    void retriesOnInvalidJsonThenSucceeds() {
-        when(llmClient.chatCompletion(anyString(), anyString()))
-                .thenReturn("This is not valid JSON");
-        when(llmClient.chatCompletionWithRetry(anyString(), anyString(), anyString()))
-                .thenReturn("[]");
-
-        DataSourceResult<List<AdverseMediaFinding>> result = dataSource.fetch("123", "TEST", "GB");
-
-        assertTrue(result.success());
-        assertTrue(result.data().isEmpty());
-        verify(llmClient).chatCompletionWithRetry(anyString(), anyString(), anyString());
-    }
-
+    @SuppressWarnings("unchecked")
     @Test
     void returnsFailureWhenBothAttemptsFail() {
-        when(llmClient.chatCompletion(anyString(), anyString()))
-                .thenReturn("not json");
-        when(llmClient.chatCompletionWithRetry(anyString(), anyString(), anyString()))
+        when(llmClient.chatCompletionWithRetry(anyString(), anyString(), any(Function.class)))
                 .thenThrow(new RuntimeException("LLM failed"));
 
         DataSourceResult<List<AdverseMediaFinding>> result = dataSource.fetch("123", "TEST", "GB");
@@ -98,7 +94,7 @@ class AdverseMediaDataSourceTest {
                   {"source":"FT","headline":"Collapse","date":null,"summary":"Second"}
                 ]
                 """;
-        when(llmClient.chatCompletion(anyString(), anyString())).thenReturn(json);
+        stubChatCompletionWithRetry(json);
 
         DataSourceResult<List<AdverseMediaFinding>> result = dataSource.fetch("123", "TEST", "GB");
 
@@ -112,7 +108,7 @@ class AdverseMediaDataSourceTest {
         String json = """
                 [{"source":"Reuters","headline":"Issue","date":null,"summary":"No date available"}]
                 """;
-        when(llmClient.chatCompletion(anyString(), anyString())).thenReturn(json);
+        stubChatCompletionWithRetry(json);
 
         DataSourceResult<List<AdverseMediaFinding>> result = dataSource.fetch("123", "TEST", "GB");
 
